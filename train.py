@@ -5,7 +5,7 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 import argparse
 import torch.utils.data as data
-from data import WiderFaceDetection, detection_collate, preproc, cfg_mnet, cfg_re50
+from data import WiderFaceDetection,  WFLWDetection, detection_collate, preproc, cfg_mnet, cfg_re50
 from layers.modules import MultiBoxLoss
 from layers.functions.prior_box import PriorBox
 import time
@@ -14,7 +14,7 @@ import math
 from models.retinaface import RetinaFace
 
 parser = argparse.ArgumentParser(description='Retinaface Training')
-parser.add_argument('--training_dataset', default='./data/widerface/train/label.txt', help='Training dataset directory')
+parser.add_argument('--training_dataset', default="WFLW", help='Training dataset directory')
 parser.add_argument('--network', default='mobile0.25', help='Backbone network mobile0.25 or resnet50')
 parser.add_argument('--num_workers', default=4, type=int, help='Number of workers used in dataloading')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float, help='initial learning rate')
@@ -48,12 +48,17 @@ momentum = args.momentum
 weight_decay = args.weight_decay
 initial_lr = args.lr
 gamma = args.gamma
-training_dataset = args.training_dataset
+# training_dataset = args.training_dataset
 save_folder = args.save_folder
 
 net = RetinaFace(cfg=cfg)
-print("Printing net...")
-print(net)
+
+if args.training_dataset == "WFLW":
+    training_dataset = "./data/WFLW/WFLW_annotations/list_98pt_rect_attr_train_test/list_98pt_rect_attr_train.txt"
+elif args.training_dataset == "wider_face":
+    training_dataset = './data/widerface/train/label.txt'
+else:
+    print("Please input correct dataset(WFLW or wider_face)")
 
 if args.resume_net is not None:
     print('Loading resume network...')
@@ -91,7 +96,10 @@ def train():
     epoch = 0 + args.resume_epoch
     print('Loading Dataset...')
 
-    dataset = WiderFaceDetection( training_dataset,preproc(img_dim, rgb_mean))
+    if args.training_dataset == "WFLW":
+        dataset = WFLWDetection( training_dataset,preproc(img_dim, rgb_mean))
+    elif args.training_dataset == "wider_face":
+        dataset = WiderFaceDetection( training_dataset,preproc(img_dim, rgb_mean))
 
     epoch_size = math.ceil(len(dataset) / batch_size)
     max_iter = max_epoch * epoch_size

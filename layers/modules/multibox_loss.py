@@ -61,12 +61,12 @@ class MultiBoxLoss(nn.Module):
 
         # match priors (default boxes) and ground truth boxes
         loc_t = torch.Tensor(num, num_priors, 4)
-        landm_t = torch.Tensor(num, num_priors, 10)
+        landm_t = torch.Tensor(num, num_priors, 196)
         conf_t = torch.LongTensor(num, num_priors)
         for idx in range(num):
             truths = targets[idx][:, :4].data
             labels = targets[idx][:, -1].data
-            landms = targets[idx][:, 4:14].data
+            landms = targets[idx][:, 4:200].data
             defaults = priors.data
             match(self.threshold, truths, defaults, self.variance, labels, landms, loc_t, conf_t, landm_t, idx)
         if GPU:
@@ -81,8 +81,11 @@ class MultiBoxLoss(nn.Module):
         num_pos_landm = pos1.long().sum(1, keepdim=True)
         N1 = max(num_pos_landm.data.sum().float(), 1)
         pos_idx1 = pos1.unsqueeze(pos1.dim()).expand_as(landm_data)
-        landm_p = landm_data[pos_idx1].view(-1, 10)
-        landm_t = landm_t[pos_idx1].view(-1, 10)
+        # landm_p = landm_data[pos_idx1].view(-1, 10)
+        landm_p = landm_data[pos_idx1].view(-1, 196)
+
+        # landm_t = landm_t[pos_idx1].view(-1, 10)
+        landm_t = landm_t[pos_idx1].view(-1, 196)
         loss_landm = F.smooth_l1_loss(landm_p, landm_t, reduction='sum')
 
 
