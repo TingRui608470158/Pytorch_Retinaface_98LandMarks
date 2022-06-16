@@ -13,10 +13,9 @@ from utils.box_utils import decode, decode_landm
 import time
 
 parser = argparse.ArgumentParser(description='Retinaface')
-
-parser.add_argument('-m', '--trained_model', default='./weights/Resnet50_Final.pth',
+parser.add_argument('-m', '--trained_model', default='./weights/mobilenet0.25_Final.pth',
                     type=str, help='Trained state_dict file path to open')
-parser.add_argument('--network', default='resnet50', help='Backbone network mobile0.25 or resnet50')
+parser.add_argument('--network', default='mobile0.25', help='Backbone network mobile0.25 or resnet50')
 parser.add_argument('--cpu', action="store_true", default=False, help='Use cpu inference')
 parser.add_argument('--confidence_threshold', default=0.02, type=float, help='confidence_threshold')
 parser.add_argument('--top_k', default=5000, type=int, help='top_k')
@@ -25,7 +24,6 @@ parser.add_argument('--keep_top_k', default=750, type=int, help='keep_top_k')
 parser.add_argument('-s', '--save_image', action="store_true", default=True, help='show detection results')
 parser.add_argument('--vis_thres', default=0.6, type=float, help='visualization_threshold')
 args = parser.parse_args()
-
 
 def check_keys(model, pretrained_state_dict):
     ckpt_keys = set(pretrained_state_dict.keys())
@@ -39,13 +37,11 @@ def check_keys(model, pretrained_state_dict):
     assert len(used_pretrained_keys) > 0, 'load NONE from pretrained checkpoint'
     return True
 
-
 def remove_prefix(state_dict, prefix):
     ''' Old style model is stored with all names of parameters sharing common prefix 'module.' '''
     print('remove prefix \'{}\''.format(prefix))
     f = lambda x: x.split(prefix, 1)[-1] if x.startswith(prefix) else x
     return {f(key): value for key, value in state_dict.items()}
-
 
 def load_model(model, pretrained_path, load_to_cpu):
     print('Loading pretrained model from {}'.format(pretrained_path))
@@ -62,7 +58,6 @@ def load_model(model, pretrained_path, load_to_cpu):
     model.load_state_dict(pretrained_dict, strict=False)
     return model
 
-
 if __name__ == '__main__':
     torch.set_grad_enabled(False)
     cfg = None
@@ -75,20 +70,19 @@ if __name__ == '__main__':
     net = load_model(net, args.trained_model, args.cpu)
     net.eval()
     print('Finished loading model!')
-    print(net)
+    # print(net)
     cudnn.benchmark = True
     device = torch.device("cpu" if args.cpu else "cuda")
     net = net.to(device)
-
     resize = 1
 
     # testing begin
-    for i in range(100):
-        image_path = "./curve/test.jpg"
-        img_raw = cv2.imread(image_path, cv2.IMREAD_COLOR)
-
+    cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+    while cap.isOpened():
+        start = time.time()
+        ret, img_raw = cap.read()
+        # cv2.imshow('frame', img_raw)
         img = np.float32(img_raw)
-
         im_height, im_width, _ = img.shape
         scale = torch.Tensor([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
         img -= (104, 117, 123)
@@ -97,9 +91,9 @@ if __name__ == '__main__':
         img = img.to(device)
         scale = scale.to(device)
 
-        tic = time.time()
+        # tic = time.time()
         loc, conf, landms = net(img)  # forward pass
-        print('net forward time: {:.4f}'.format(time.time() - tic))
+        # print('net forward time: {:.4f}'.format(time.time() - tic))
 
         priorbox = PriorBox(cfg, image_size=(im_height, im_width))
         priors = priorbox.forward()
@@ -110,9 +104,11 @@ if __name__ == '__main__':
         boxes = boxes.cpu().numpy()
         scores = conf.squeeze(0).data.cpu().numpy()[:, 1]
         landms = decode_landm(landms.data.squeeze(0), prior_data, cfg['variance'])
-        scale1 = torch.Tensor([img.shape[3], img.shape[2], img.shape[3], img.shape[2],
-                               img.shape[3], img.shape[2], img.shape[3], img.shape[2],
-                               img.shape[3], img.shape[2]])
+        scale1 = torch.Tensor(196)
+        for i in range(0,196,2):
+            scale1[i]   = img.shape[3]
+            scale1[i+1] = img.shape[2]
+
         scale1 = scale1.to(device)
         landms = landms * scale1 / resize
         landms = landms.cpu().numpy()
@@ -135,11 +131,9 @@ if __name__ == '__main__':
         # keep = nms(dets, args.nms_threshold,force_cpu=args.cpu)
         dets = dets[keep, :]
         landms = landms[keep]
-
         # keep top-K faster NMS
         dets = dets[:args.keep_top_k, :]
         landms = landms[:args.keep_top_k, :]
-
         dets = np.concatenate((dets, landms), axis=1)
 
         # show image
@@ -154,15 +148,13 @@ if __name__ == '__main__':
                 cy = b[1] + 12
                 cv2.putText(img_raw, text, (cx, cy),
                             cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
-
                 # landms
-                cv2.circle(img_raw, (b[5], b[6]), 1, (0, 0, 255), 4)
-                cv2.circle(img_raw, (b[7], b[8]), 1, (0, 255, 255), 4)
-                cv2.circle(img_raw, (b[9], b[10]), 1, (255, 0, 255), 4)
-                cv2.circle(img_raw, (b[11], b[12]), 1, (0, 255, 0), 4)
-                cv2.circle(img_raw, (b[13], b[14]), 1, (255, 0, 0), 4)
-            # save image
+                for i in range(0,196,2):
+                    cv2.circle(img_raw, (b[5+i], b[6+i]), 1, (255, 0, 0), 4)
 
-            name = "test.jpg"
-            cv2.imwrite(name, img_raw)
+            end = time.time()
+            cv2.putText(img_raw,"FPS : "+str(int(1/(end-start))),(10,22), cv2.FONT_HERSHEY_SIMPLEX, 0.8,(0,0,0),2)
+            cv2.imshow("Face", img_raw)
+            cv2.waitKey(10)
+        
 
