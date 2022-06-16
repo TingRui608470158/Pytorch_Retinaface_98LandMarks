@@ -13,7 +13,7 @@ from utils.box_utils import decode, decode_landm
 import time
 
 parser = argparse.ArgumentParser(description='Retinaface')
-parser.add_argument('-m', '--trained_model', default='./weights_orign/mobilenet0.25_Final.pth',
+parser.add_argument('-m', '--trained_model', default='./weights/mobilenet0.25_Final.pth',
                     type=str, help='Trained state_dict file path to open')
 parser.add_argument('--network', default='mobile0.25', help='Backbone network mobile0.25 or resnet50')
 parser.add_argument('--cpu', action="store_true", default=False, help='Use cpu inference')
@@ -92,7 +92,7 @@ if __name__ == '__main__':
         scale = scale.to(device)
 
         # tic = time.time()
-        # loc, conf, landms = net(img)  # forward pass
+        loc, conf, landms = net(img)  # forward pass
         # print('net forward time: {:.4f}'.format(time.time() - tic))
 
         priorbox = PriorBox(cfg, image_size=(im_height, im_width))
@@ -104,9 +104,11 @@ if __name__ == '__main__':
         boxes = boxes.cpu().numpy()
         scores = conf.squeeze(0).data.cpu().numpy()[:, 1]
         landms = decode_landm(landms.data.squeeze(0), prior_data, cfg['variance'])
-        scale1 = torch.Tensor([img.shape[3], img.shape[2], img.shape[3], img.shape[2],
-                               img.shape[3], img.shape[2], img.shape[3], img.shape[2],
-                               img.shape[3], img.shape[2]])
+        scale1 = torch.Tensor(196)
+        for i in range(0,196,2):
+            scale1[i]   = img.shape[3]
+            scale1[i+1] = img.shape[2]
+
         scale1 = scale1.to(device)
         landms = landms * scale1 / resize
         landms = landms.cpu().numpy()
@@ -147,11 +149,9 @@ if __name__ == '__main__':
                 cv2.putText(img_raw, text, (cx, cy),
                             cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
                 # landms
-                cv2.circle(img_raw, (b[5], b[6]), 1, (0, 0, 255), 4)
-                cv2.circle(img_raw, (b[7], b[8]), 1, (0, 255, 255), 4)
-                cv2.circle(img_raw, (b[9], b[10]), 1, (255, 0, 255), 4)
-                cv2.circle(img_raw, (b[11], b[12]), 1, (0, 255, 0), 4)
-                cv2.circle(img_raw, (b[13], b[14]), 1, (255, 0, 0), 4)
+                for i in range(0,196,2):
+                    cv2.circle(img_raw, (b[5+i], b[6+i]), 1, (255, 0, 0), 4)
+
             end = time.time()
             cv2.putText(img_raw,"FPS : "+str(int(1/(end-start))),(10,22), cv2.FONT_HERSHEY_SIMPLEX, 0.8,(0,0,0),2)
             cv2.imshow("Face", img_raw)
